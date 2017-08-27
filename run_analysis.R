@@ -1,102 +1,89 @@
+#PART 1 OF ASSIGNMENT
 
-## Downloading and unzipping dataset
+library(dplyr)
+library(data.table)
+library(tidyr)
+library(reshape2)
 
-if(!file.exists("./data")){dir.create("./data")}
-fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-download.file(fileUrl,destfile="./data/Dataset.zip")
+#makes variables out of the list in each of the files
+xtrain <- read.table('./UCI HAR Dataset/train/X_train.txt')
+ytrain <- read.table('./UCI HAR Dataset/train/y_train.txt')
+subjecttrain <- read.table('./UCI HAR Dataset/train/subject_train.txt')
+xtest <- read.table('./UCI HAR Dataset/test/X_test.txt')
+ytest <- read.table('./UCI HAR Dataset/test/y_test.txt')
+subjecttest <- read.table('./UCI HAR Dataset/test/subject_test.txt')
 
-# Unzip dataSet to /data directory
-unzip(zipfile="./data/Dataset.zip",exdir="./data")
+#combine test & train variables into a data table
+xdata <- rbind(xtest, xtrain) #features
+ydata <- rbind(ytest, ytrain) #activities
+subjectdata <- rbind(subjecttest, subjecttrain)
+#remove now-unneeded variables to save memory
+rm(ytest, ytrain, xtest, xtrain, subjecttest, subjecttrain)
 
+#assign name for subjectdata column, activity column, and all of the feature columns
+names(subjectdata) <-"SubjectID"
+names(ydata) <- "activity"
+featureIDs <- read.table('./UCI HAR Dataset/features.txt')
+   names(xdata) <- featureIDs$V2
+rm(featureIDs) #to save space
+   
+#combine above datasets into one dataset
+tidytable <- cbind(subjectdata,ydata,xdata)
+rm(subjectdata, ydata, xdata) #to save space
 
-# 1. Merge the training and the test sets to create one data set.
+#PART 2 OF ASSIGNEMENT
 
-# Read in the data from files
-features     = read.table('./features.txt',header=FALSE); #imports features.txt
-activityType = read.table('./activity_labels.txt',header=FALSE); #imports activity_labels.txt
-subjectTrain = read.table('./train/subject_train.txt',header=FALSE); #imports subject_train.txt
-xTrain       = read.table('./train/x_train.txt',header=FALSE); #imports x_train.txt
-yTrain       = read.table('./train/y_train.txt',header=FALSE); #imports y_train.txt
+# make TRUE/FALSE array corresponding to the mean & standard deviation columns we wish to keep
+trimtidytable <- grepl("mean", names(tidytable)) |  grepl("std", names(tidytable))
+trimtidytable[1:2] <- TRUE #this line keeps subject & activity columns
 
-# Assigin column names to the data imported above
-colnames(activityType)  = c('activityId','activityType');
-colnames(subjectTrain)  = "subjectId";
-colnames(xTrain)        = features[,2]; 
-colnames(yTrain)        = "activityId";
+# equate tidytable dataframe to trimtidytable T/F array, therefore only keeping colums which we marked "TRUE"
+tidytable <- tidytable[, trimtidytable]
+rm(trimtidytable) #to save space
 
-# cCreate the final training set by merging yTrain, subjectTrain, and xTrain
-trainingData = cbind(yTrain,subjectTrain,xTrain);
+#PART 3 OF ASSIGNMENT
 
-# Read in the test data
-subjectTest = read.table('./test/subject_test.txt',header=FALSE); #imports subject_test.txt
-xTest       = read.table('./test/x_test.txt',header=FALSE); #imports x_test.txt
-yTest       = read.table('./test/y_test.txt',header=FALSE); #imports y_test.txt
+#replace numbers in activity column with activity names
+tidytable$activity[tidytable$activity==1] <- "walking"
+tidytable$activity[tidytable$activity==2] <- "walking upstairs"
+tidytable$activity[tidytable$activity==3] <- "walking downstairs"
+tidytable$activity[tidytable$activity==4] <- "sitting"
+tidytable$activity[tidytable$activity==5] <- "standing"
+tidytable$activity[tidytable$activity==6] <- "laying"
 
-# Assign column names to the test data imported above
-colnames(subjectTest) = "subjectId";
-colnames(xTest)       = features[,2]; 
-colnames(yTest)       = "activityId";
+#PART 4 OF ASSIGNEMENT
 
+#replace variable names with more descriptive names
+names(tidytable) <- gsub("^f","Frequency Domain ", names(tidytable))
+names(tidytable) <- gsub("^t","Time Domain ", names(tidytable))
+names(tidytable) <- gsub("Acc","Linear Acceleration ", names(tidytable))
+names(tidytable) <- gsub("-mean", "Mean", names(tidytable))
+names(tidytable) <- gsub("mean", "Mean", names(tidytable))
+names(tidytable) <- gsub("-std", "Standard Deviation", names(tidytable))
+names(tidytable) <- gsub("Gyro", "Angular Velocity ", names(tidytable))
+names(tidytable) <- gsub("Body", "Body ", names(tidytable))
+names(tidytable) <- gsub("Gravity", "Gravitational ", names(tidytable))
+names(tidytable) <- gsub("Jerk", "Jerk ", names(tidytable))
+names(tidytable) <- gsub("Mag", "Magnitude ", names(tidytable))
+names(tidytable) <- gsub("MeanFreq", "Mean Frequency", names(tidytable))
+names(tidytable) <- gsub("\\()", "", names(tidytable))
+#renames first two columns to their original (Yeah, it's a workaround, but it gives the right result)
+names(tidytable)[1] <- "SubjectID"
+names(tidytable)[2] <- "Activity"
 
-# Create the final test set by merging the xTest, yTest and subjectTest data
-testData = cbind(yTest,subjectTest,xTest);
+#PART 5 OF ASSIGNMENT
 
+#group by subject ID and by activity for each subject, giving each variable and value for each grouping
+grouped <- melt(tidytable, id=c("SubjectID", "Activity"))
+#use mean function to 
+#create additional dataset with average of each variable, by subject and by activity
+tidy_bymean <- dcast(grouped, SubjectID+Activity ~ variable, mean)
+   rm(grouped) #to save space
 
-# Combine training and test data to create a final data set
-finalData = rbind(trainingData,testData);
+#this would create instead two datasets, one with averages by subject id, and one with averages by activity
+#(included it since the assignment could be a little abiguous)
+   #tidysubject <- dcast(melted, SubjectID ~ variable, mean)
+   #tidyactivity <- dcast(melted, Activity ~ variable, mean)
 
-# Create a vector for the column names from the finalData, which will be used
-# to select the desired mean() & stddev() columns
-colNames  = colnames(finalData); 
-
-# 2. Extract only the measurements on the mean and standard deviation for each measurement. 
-
-# Create a logicalVector that contains TRUE values for the ID, mean() & stddev() columns and FALSE for others
-logicalVector = (grepl("activity..",colNames) | grepl("subject..",colNames) | grepl("-mean..",colNames) & !grepl("-meanFreq..",colNames) & !grepl("mean..-",colNames) | grepl("-std..",colNames) & !grepl("-std()..-",colNames));
-
-# Subset finalData table based on the logicalVector to keep only desired columns
-finalData = finalData[logicalVector==TRUE];
-
-# 3. Use descriptive activity names to name the activities in the data set
-
-# Merge the finalData set with the acitivityType table to include descriptive activity names
-finalData = merge(finalData,activityType,by='activityId',all.x=TRUE);
-
-# Updating the colNames vector to include the new column names after merge
-colNames  = colnames(finalData); 
-
-# 4. Appropriately label the data set with descriptive activity names. 
-
-# Cleaning up the variable names
-for (i in 1:length(colNames)) 
-{
-  colNames[i] = gsub("\\()","",colNames[i])
-  colNames[i] = gsub("-std$","StdDev",colNames[i])
-  colNames[i] = gsub("-mean","Mean",colNames[i])
-  colNames[i] = gsub("^(t)","time",colNames[i])
-  colNames[i] = gsub("^(f)","freq",colNames[i])
-  colNames[i] = gsub("([Gg]ravity)","Gravity",colNames[i])
-  colNames[i] = gsub("([Bb]ody[Bb]ody|[Bb]ody)","Body",colNames[i])
-  colNames[i] = gsub("[Gg]yro","Gyro",colNames[i])
-  colNames[i] = gsub("AccMag","AccMagnitude",colNames[i])
-  colNames[i] = gsub("([Bb]odyaccjerkmag)","BodyAccJerkMagnitude",colNames[i])
-  colNames[i] = gsub("JerkMag","JerkMagnitude",colNames[i])
-  colNames[i] = gsub("GyroMag","GyroMagnitude",colNames[i])
-};
-
-# Reassigning the new descriptive column names to the finalData set
-colnames(finalData) = colNames;
-
-# 5. Create a second, independent tidy data set with the average of each variable for each activity and each subject. 
-
-# Create a new table, finalDataNoActivityType without the activityType column
-finalDataNoActivityType  = finalData[,names(finalData) != 'activityType'];
-
-# Summarizing the finalDataNoActivityType table to include just the mean of each variable for each activity and each subject
-tidyData    = aggregate(finalDataNoActivityType[,names(finalDataNoActivityType) != c('activityId','subjectId')],by=list(activityId=finalDataNoActivityType$activityId,subjectId = finalDataNoActivityType$subjectId),mean);
-
-# Merging the tidyData with activityType to include descriptive acitvity names
-tidyData    = merge(tidyData,activityType,by='activityId',all.x=TRUE);
-
-# Export the tidyData set 
-write.table(tidyData, './tidyData.txt',row.names=TRUE,sep='\t')
+#create txt file for dataset decribed in assignment question 5
+write.table(tidy_bymean, "tidy_bymean.txt", row.names = FALSE)
